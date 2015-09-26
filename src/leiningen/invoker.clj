@@ -53,12 +53,23 @@
     (case step-name
       :lein (apply-step-lein step-args dir out)
       :exec (apply-step-exec step-args dir out)
+      :eval (do (eval (first step-args)) success)
       :exists? (apply-step-exists? step-args dir))))
+
+(defn invoke-cond-steps
+  [key steps dir out]
+  (doseq [step steps]
+    (if (= key (first step))
+      (doseq [sub-step (rest step)]
+        (apply-step sub-step dir out)))))
 
 (defn invoke-steps
   "Execute the given invoker steps"
   [steps dir out]
-  (doseq [step steps] (apply-step step dir out)))
+  (try
+    (invoke-cond-steps :before steps dir out)
+    (doseq [step steps] (apply-step step dir out))
+    (finally (invoke-cond-steps :after steps dir out))))
 
 (defn read-invoker-file
   "Read the steps in the invoker file"

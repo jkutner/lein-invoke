@@ -10,6 +10,9 @@
   (is (not (= "simple" (read-invoker-file {} (fixture "simple")))))
   (is (= [[:lein "stage"] [:exists? "target/myapp.jar"]] (read-invoker-file {} (fixture "simple")))))
 
+(deftest read-stateful-invoke-file
+  (is (= [[:lein "foobar"] [:exec "foobar"]] (read-invoker-file {} (fixture "stateful")))))
+
 (deftest reduces-success-result
   (is (= success (reduce-results [success]))))
 
@@ -27,3 +30,24 @@
 
 (deftest exists?-postive-test
   (is (not (= success (apply-step-exists? ["foobar.clj"] (fixture "simple"))))))
+
+(deftest invokes-cond-steps
+  (is (thrown? UnsupportedOperationException
+        (invoke-cond-steps :x [[:x [:eval '(throw (UnsupportedOperationException. "test"))]]] nil nil))))
+
+(deftest does-not-invoke-cond-steps
+  (is (= nil (invoke-cond-steps :x [[:y [:eval '(throw (Exception. "test"))]]] nil nil))))
+
+(deftest invokes-before-steps
+  (is (thrown? UnsupportedOperationException
+        (invoke-steps [[:before [:eval '(throw (UnsupportedOperationException. "test"))]]] nil nil))))
+
+(deftest invokes-after-steps
+  (is (thrown? UnsupportedOperationException
+       (invoke-steps
+        [[:eval (delay 1)]
+         [:after [:eval '(throw (UnsupportedOperationException. "test"))]]]
+        nil nil))))
+
+(deftest applies-step-eval
+  (is (= success (apply-step [:eval '(+ 1 1)] nil nil))))
