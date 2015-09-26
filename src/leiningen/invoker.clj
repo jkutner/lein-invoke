@@ -1,6 +1,7 @@
 (ns leiningen.invoker
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
+            [clojure.java.shell :as shell]
             [me.raynes.fs :as fs]
             [cemerick.pomegranate.aether :as aether]
             [leiningen.core.project :as project]
@@ -24,12 +25,17 @@
   [dir]
   (let [tmpdir (fs/temp-dir "lein-invoker")]
     (fs/copy-dir dir tmpdir)
-    tmpdir))
+    (io/file tmpdir (fs/name dir))))
 
 (defn apply-step-exec
   [args dir out]
-  (print "EXEC" args)
-  (success))
+  (spit
+   out
+   (:out
+    (fs/with-mutable-cwd
+      (fs/chdir dir)
+      (apply shell/sh args))))
+  success)
 
 ; this just calls out to exec but could be smarted in the future
 (defn apply-step-lein
@@ -79,10 +85,12 @@
 (defn invoke-dir
   "Invoke lein tasks for the project in the given directory"
   [project dir]
-  (let [tmpdir (copy-to-temp-dir dir)]
-    (fs/mkdirs (io/file "target" (fs/name dir)))
-    ;; create output file
-    (invoke-steps (read-invoker-file tmpdir) tmpdir nil)))
+  (let [tmpdir (copy-to-temp-dir dir)
+        target-dir (str "target/invoker/" (fs/name dir))
+        out-file (str target-dir "/invoke.log")]
+    (fs/mkdirs target-dir)
+    (fs/touch out-file)
+    (invoke-steps (read-invoker-file project tmpdir) tmpdir out-file)))
 
 (defn invoke-dirs
   "Invoke Lein Task on all projects in the given directory"

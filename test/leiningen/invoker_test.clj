@@ -51,3 +51,7 @@
 
 (deftest applies-step-eval
   (is (= success (apply-step [:eval '(+ 1 1)] nil nil))))
+
+(deftest invokes-ls-on-a-dir
+  (invoke-dir {} (fixture "output"))
+  (is (= "hello world\n" (slurp "target/invoker/output/invoke.log"))))
