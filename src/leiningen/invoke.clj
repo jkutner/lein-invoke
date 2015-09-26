@@ -1,4 +1,4 @@
-(ns leiningen.invoker
+(ns leiningen.invoke
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.java.shell :as shell]
@@ -29,18 +29,16 @@
 
 (defn apply-step-exec
   [args dir out]
-  (spit
-   out
-   (:out
-    (fs/with-mutable-cwd
-      (fs/chdir dir)
-      (apply shell/sh args))))
+  (println "--> :exec" args)
+  (spit out
+   (:out (apply shell/sh (flatten (cons args [:dir dir]))))
+   :append true)
   success)
 
 ; this just calls out to exec but could be smarted in the future
 (defn apply-step-lein
   [args dir out]
-  (apply-step-exec (apply str (cons "lein " args)) dir out))
+  (apply-step-exec (cons "lein" args) dir out))
 
 (defn apply-step-exists?
   [args dir]
@@ -60,7 +58,9 @@
       :lein (apply-step-lein step-args dir out)
       :exec (apply-step-exec step-args dir out)
       :eval (do (eval (first step-args)) success)
-      :exists? (apply-step-exists? step-args dir))))
+      :exists? (apply-step-exists? step-args dir)
+      :before nil
+      :after nil)))
 
 (defn invoke-cond-steps
   [key steps dir out]
@@ -75,7 +75,9 @@
   (try
     (invoke-cond-steps :before steps dir out)
     (doseq [step steps] (apply-step step dir out))
-    (finally (invoke-cond-steps :after steps dir out))))
+    (finally
+      (invoke-cond-steps :after steps dir out)
+      (fs/delete-dir dir)))
 
 (defn read-invoker-file
   "Read the steps in the invoker file"
@@ -88,20 +90,22 @@
   (let [tmpdir (copy-to-temp-dir dir)
         target-dir (str "target/invoker/" (fs/name dir))
         out-file (str target-dir "/invoke.log")]
+    (println "Running" (fs/name dir) "...")
     (fs/mkdirs target-dir)
-    (fs/touch out-file)
+    (spit out-file "")
     (invoke-steps (read-invoker-file project tmpdir) tmpdir out-file)))
 
 (defn invoke-dirs
   "Invoke Lein Task on all projects in the given directory"
   [project dir]
+  (println "Invoking tasks on all projects in" dir)
   (doseq [f (.listFiles (io/file dir))]
     (if (.isDirectory f)
-      (print "d ")
-      (print "- "))
-    (println (.getName f))))
+      (if (fs/exists? (io/file f "invoke.clj"))
+        (invoke-dir project f)
+        (println "Skipping" (fs/name f) "(no invoke.clj found)")))))
 
 (defn invoke
   "Invoke a Lein Task on a project or set of projects"
   [project & cmd]
-  (apply invoke-dir "it"))
+  (invoke-dirs project "it"))

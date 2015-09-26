@@ -1,7 +1,7 @@
-(ns leiningen.invoker-test
+(ns leiningen.invoke-test
   (:require [clojure.test :refer :all]
             [clojure.java.io :as io]
-            [leiningen.invoker :refer :all]
+            [leiningen.invoke :refer :all]
             [clojure.string :as s]))
 
 (defn fixture [file] (io/file "test" "fixtures" file))
@@ -54,4 +54,4 @@
 
 (deftest invokes-ls-on-a-dir
   (invoke-dir {} (fixture "output"))
-  (is (= "hello world\n" (slurp "target/invoker/output/invoke.log"))))
+  (is (= "asdfasdf\n" (slurp "target/invoker/output/invoke.log"))))
