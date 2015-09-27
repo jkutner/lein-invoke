@@ -67,4 +67,4 @@
 (deftest success-on-get
   (is (= success
          (apply-step
-          [:contains? "crocodile" [:get "www.httpbin.org/get?arg=crocodile"]] nil nil))))
+          [:contains? "crocodile" [:get "www.httpbin.org/get?arg=crocodile"]] nil (fs/temp-file "lein-invoke-test")))))

@@ -29,7 +29,7 @@
 
 (defn apply-step-exec
   [args dir out]
-  (println "--> :exec" args)
+  (println " > :exec" args)
   (spit out
    (:out (apply shell/sh (flatten (cons args [:dir dir]))))
    :append true)
@@ -51,8 +51,11 @@
     args)))
 
 (defn apply-step-get
-  [args]
-  (:out (apply shell/sh (cons "curl" args))))
+  [args out]
+  (println " > :get " args)
+  (let [resp (:out (apply shell/sh (cons "curl" args)))]
+    (spit out resp)
+    resp))
 
 (defn apply-step
   [step dir out]
@@ -66,13 +69,13 @@
       :contains? (let [value (apply-step (first (rest step-args)) dir out)]
                    (if (.contains value (first step-args))
                        success
-                      (do
-                        (spit out value :append true)
-                        (failure (str "step does not contain")))))
-      :get (apply-step-get step-args)
+                       (do
+                        (spit out (str value "\n") :append true)
+                        (failure (str "step does not contain " (first step-args))))))
+      :get (apply-step-get step-args out)
       :slurp (slurp (first step-args))
-      :before nil
-      :after nil)))
+      :before success
+      :after success)))
 
 (defn invoke-cond-steps
   [key steps dir out]
@@ -86,7 +89,11 @@
   [steps dir out]
   (try
     (invoke-cond-steps :before steps dir out)
-    (doseq [step steps] (apply-step step dir out))
+    (reduce-results
+     (map
+      (fn [step]
+        (apply-step step dir out))
+      steps))
     (finally
       (invoke-cond-steps :after steps dir out))))
 
@@ -104,19 +111,24 @@
     (println "Running" (fs/name dir) "...")
     (fs/mkdirs target-dir)
     (spit out-file "")
-    (invoke-steps (read-invoker-file project tmpdir) tmpdir out-file)))
+    (let [result (invoke-steps (read-invoker-file project tmpdir) tmpdir out-file)]
+      (println " >" result)
+      result)))
 
 (defn invoke-dirs
   "Invoke Lein Task on all projects in the given directory"
   [project dir]
   (println "Invoking tasks on all projects in" dir)
-  (doseq [f (.listFiles (io/file dir))]
-    (if (.isDirectory f)
-      (if (fs/exists? (io/file f "invoke.clj"))
-        (invoke-dir project f)
-        (println "Skipping" (fs/name f) "(no invoke.clj found)")))))
+  ;(doseq [f (.listFiles (io/file dir))]
+  (reduce-results
+    (map (fn [f]
+      (if (.isDirectory f)
+        (if (fs/exists? (io/file f "invoke.clj"))
+          (invoke-dir project f)
+          (println "Skipping" (fs/name f) "(no invoke.clj found)"))))
+      (.listFiles (io/file dir)))))
 
 (defn invoke
   "Invoke a Lein Task on a project or set of projects"
   [project & cmd]
-  (invoke-dirs project "it"))
+  (if (not (= success (invoke-dirs project "it"))) (System/exit 1)))
