@@ -29,7 +29,7 @@
 
 (defn apply-step-exec
   [args dir out]
-  (println " > :exec" args)
+  (println "> :exec" args)
   (spit out
    (:out (apply shell/sh (flatten (cons args [:dir dir]))))
    :append true)
@@ -52,7 +52,7 @@
 
 (defn apply-step-get
   [args out]
-  (println " > :get " args)
+  (println "> :get " args)
   (let [resp (:out (apply shell/sh (cons "curl" args)))]
     (spit out resp)
     resp))
@@ -112,7 +112,7 @@
     (fs/mkdirs target-dir)
     (spit out-file "")
     (let [result (invoke-steps (read-invoker-file project tmpdir) tmpdir out-file)]
-      (println " >" result)
+      (println ">" result)
       result)))
 
 (defn invoke-dirs
