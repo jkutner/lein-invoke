@@ -50,6 +50,10 @@
         (failure (str "file " f " does not exist!"))))
     args)))
 
+(defn apply-step-get
+  [args]
+  (:out (apply shell/sh (cons "curl" args))))
+
 (defn apply-step
   [step dir out]
   (let [step-name (first step)
@@ -59,6 +63,14 @@
       :exec (apply-step-exec step-args dir out)
       :eval (do (eval (first step-args)) success)
       :exists? (apply-step-exists? step-args dir)
+      :contains? (let [value (apply-step (first (rest step-args)) dir out)]
+                   (if (.contains value (first step-args))
+                       success
+                      (do
+                        (spit out value :append true)
+                        (failure (str "step does not contain")))))
+      :get (apply-step-get step-args)
+      :slurp (slurp (first step-args))
       :before nil
       :after nil)))
 
@@ -76,8 +88,7 @@
     (invoke-cond-steps :before steps dir out)
     (doseq [step steps] (apply-step step dir out))
     (finally
-      (invoke-cond-steps :after steps dir out)
-      (fs/delete-dir dir)))
+      (invoke-cond-steps :after steps dir out))))
 
 (defn read-invoker-file
   "Read the steps in the invoker file"

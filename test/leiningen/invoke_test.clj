@@ -1,6 +1,7 @@
 (ns leiningen.invoke-test
   (:require [clojure.test :refer :all]
             [clojure.java.io :as io]
+            [me.raynes.fs :as fs]
             [leiningen.invoke :refer :all]
             [clojure.string :as s]))
 
@@ -55,3 +56,15 @@
 (deftest invokes-ls-on-a-dir
   (invoke-dir {} (fixture "output"))
   (is (= "asdfasdf\n" (slurp "target/invoker/output/invoke.log"))))
+
+(deftest succeeds-on-contains?
+  (is (= success
+         (apply-step
+          [:contains? "lein-invoke" [:slurp "project.clj"]]
+          nil
+          (fs/temp-file "lein-invoke-test")))))
+
+(deftest success-on-get
+  (is (= success
+         (apply-step
+          [:contains? "crocodile" [:get "www.httpbin.org/get?arg=crocodile"]] nil nil))))
