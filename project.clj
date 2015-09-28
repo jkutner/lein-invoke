@@ -1,4 +1,4 @@
-(defproject lein-invoke "0.1.2"
+(defproject lein-invoke "0.1.3-SNAPSHOT"
   :description "Invoke Leiningen tasks and test them"
   :url "https://github.com/jkutner/lein-invoke"
   :license {:name "Eclipse Public License"
