@@ -7,6 +7,10 @@
 
 (defn fixture [file] (io/file "test" "fixtures" file))
 
+(deftest replaces-project-version
+  (copy-to-temp-dir {:version "1.2.3"} (fixture "simple"))
+  (is (.contains (slurp "target/invoker/simple/project.clj") "1.2.3")))
+
 (deftest read-simple-invoke-file
   (is (not (= "simple" (read-invoker-file {} (fixture "simple")))))
   (is (= [[:lein "stage"] [:exists? "target/myapp.jar"]] (read-invoker-file {} (fixture "simple")))))

@@ -23,11 +23,19 @@
   (let [failures (remove (fn [r] (:success r)) results)]
     (if (empty? failures) [(success :all)] failures)))
 
+(defn gsub
+  [s re v]
+  (str/replace s (re-pattern re) v))
+
 (defn copy-to-temp-dir
-  [dir]
+  [project dir]
   (fs/mkdirs workdir)
   (fs/copy-dir dir workdir)
-  (io/file workdir (fs/name dir)))
+  (let [newdir (io/file workdir (fs/name dir))
+        project-clj (io/file newdir "project.clj")]
+    (if (fs/exists? project-clj)
+      (spit project-clj (gsub (slurp project-clj) "@project_version@" (:version project))))
+    newdir))
 
 (defn apply-step-exec
   [args dir out]
@@ -103,7 +111,7 @@
 (defn invoke-dir
   "Invoke lein tasks for the project in the given directory"
   [project dir]
-  (let [tmpdir (copy-to-temp-dir dir)
+  (let [tmpdir (copy-to-temp-dir project dir)
         out-file (str tmpdir "/invoke.log")]
     (println "Running" (fs/name dir) "...")
     (spit out-file "")
