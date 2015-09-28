@@ -31,9 +31,10 @@
 
 (defn apply-step-exec
   [args dir out]
-  (let [msg (:out (apply shell/sh (flatten (cons args [:dir dir]))))]
-    (spit out msg :append true)
-    (success :exec msg)))
+  (let [msg (apply shell/sh (flatten (cons args [:dir dir])))]
+    (spit out (:out msg) :append true)
+    (spit out (:err msg) :append true)
+    (success :exec (:out msg))))
 
 ; this just calls out to exec but could be smarted in the future
 (defn apply-step-lein
