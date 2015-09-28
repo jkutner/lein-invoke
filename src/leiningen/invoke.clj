@@ -8,32 +8,32 @@
             [leiningen.core.classpath :as classpath]
             [leiningen.core.main :as main]))
 
-(def success "SUCCESS")
+(defn create-result
+  [success step message]
+  {:success success, :step step, :message message})
 
-(defn failure [msg] (str "FAILURE: " msg))
+(def workdir "target/invoker")
+
+(defn success [& args] (create-result true (first args) (second args)))
+
+(defn failure [step msg] (create-result false step msg))
 
 (defn reduce-results
   [results]
-  (reduce
-   (fn [previous next]
-     (if (= previous next)
-       next
-       (if (= previous success) next previous)))
-   results))
+  (let [failures (remove (fn [r] (:success r)) results)]
+    (if (empty? failures) [(success :all)] failures)))
 
 (defn copy-to-temp-dir
   [dir]
-  (let [tmpdir (fs/temp-dir "lein-invoker")]
-    (fs/copy-dir dir tmpdir)
-    (io/file tmpdir (fs/name dir))))
+  (fs/mkdirs workdir)
+  (fs/copy-dir dir workdir)
+  (io/file workdir (fs/name dir)))
 
 (defn apply-step-exec
   [args dir out]
-  (println "> :exec" args)
-  (spit out
-   (:out (apply shell/sh (flatten (cons args [:dir dir]))))
-   :append true)
-  success)
+  (let [msg (:out (apply shell/sh (flatten (cons args [:dir dir]))))]
+    (spit out msg :append true)
+    (success :exec msg)))
 
 ; this just calls out to exec but could be smarted in the future
 (defn apply-step-lein
@@ -42,40 +42,37 @@
 
 (defn apply-step-exists?
   [args dir]
-  (reduce-results
-   (map
-    (fn [f]
-      (if (fs/exists? (io/file dir f))
-        success
-        (failure (str "file " f " does not exist!"))))
-    args)))
+  (let [f (first args)]
+    (if (fs/exists? (io/file dir f))
+      (success :exists?)
+      (failure :exists? (str f " does not exist!")))))
 
 (defn apply-step-get
   [args out]
-  (println "> :get " args)
   (let [resp (:out (apply shell/sh (cons "curl" args)))]
-    (spit out resp)
-    resp))
+    (spit out resp :append true)
+    (success :get resp)))
 
 (defn apply-step
   [step dir out]
   (let [step-name (first step)
         step-args (rest step)]
+    (println ">" step-name step-args)
     (case step-name
       :lein (apply-step-lein step-args dir out)
       :exec (apply-step-exec step-args dir out)
-      :eval (do (eval (first step-args)) success)
+      :eval (do (eval (first step-args)) (success :eval))
       :exists? (apply-step-exists? step-args dir)
       :contains? (let [value (apply-step (first (rest step-args)) dir out)]
-                   (if (.contains value (first step-args))
-                       success
+                   (if (.contains (:message value) (first step-args))
+                       (success :contains?)
                        (do
-                        (spit out (str value "\n") :append true)
-                        (failure (str "step does not contain " (first step-args))))))
+                         (spit out (str value "\n") :append true)
+                         (failure :contains? (str "step does not contain: " (first step-args))))))
       :get (apply-step-get step-args out)
-      :slurp (slurp (first step-args))
-      :before success
-      :after success)))
+      :slurp (success :slurp (slurp (str (first step-args))))
+      :before (success :before)
+      :after (success :after))))
 
 (defn invoke-cond-steps
   [key steps dir out]
@@ -106,14 +103,17 @@
   "Invoke lein tasks for the project in the given directory"
   [project dir]
   (let [tmpdir (copy-to-temp-dir dir)
-        target-dir (str "target/invoker/" (fs/name dir))
-        out-file (str target-dir "/invoke.log")]
+        out-file (str tmpdir "/invoke.log")]
     (println "Running" (fs/name dir) "...")
-    (fs/mkdirs target-dir)
     (spit out-file "")
-    (let [result (invoke-steps (read-invoker-file project tmpdir) tmpdir out-file)]
-      (println ">" result)
-      result)))
+    (let [results (invoke-steps (read-invoker-file project tmpdir) tmpdir out-file)]
+      (if (not (:success (first results))) (println (slurp out-file)))
+      (doseq [result results]
+        (println ">"
+                 (if (:success result)
+                   "SUCCESS"
+                   (str "FAILURE: " (:message result)))))
+      (first results))))
 
 (defn invoke-dirs
   "Invoke Lein Task on all projects in the given directory"
@@ -125,10 +125,17 @@
       (if (.isDirectory f)
         (if (fs/exists? (io/file f "invoke.clj"))
           (invoke-dir project f)
-          (println "Skipping" (fs/name f) "(no invoke.clj found)"))))
+          (do (println "Skipping" (fs/name f) "(no invoke.clj found)") (success :skip)))
+        (success :skip)))
       (.listFiles (io/file dir)))))
 
 (defn invoke
   "Invoke a Lein Task on a project or set of projects"
   [project & cmd]
-  (if (not (= success (invoke-dirs project "it"))) (System/exit 1)))
+  (fs/delete-dir workdir)
+  (if (:success
+             (if (empty? cmd)
+               (first (invoke-dirs project "it"))
+               (invoke-dir project (first cmd))))
+      (println "Invoker SUCCESS")
+      (do (main/warn "Invoker FAILURE!") (System/exit 1))))
